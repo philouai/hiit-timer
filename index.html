@@ -179,6 +179,25 @@ th:nth-child(-n+2), td:nth-child(-n+2){ text-align:left; }
 .gctrl button:not(.main){ font-size:.95rem; }
 .gctrl .arm{ border-color:#C0392B; color:#C0392B; }
 .gnote{ font-size:.85rem; opacity:.65; line-height:1.4; margin:10px 0 0; text-align:center; }
+/* home mode buttons + change of speed */
+.homebtns{ display:flex; gap:18px; justify-content:center; margin-top:18px; }
+.homebtns .gpsbtn{ margin-top:0; }
+.cview.effort{ --g-bg:var(--work); --g-ink:var(--work-ink); }
+.cview.recovery{ --g-bg:var(--rest); --g-ink:var(--rest-ink); }
+.cview.flash{ animation:flash .4s ease-out; }
+.cclock{ font-weight:600; font-variant-numeric:tabular-nums; opacity:.8; }
+.cset{ display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:end; margin:16px 0 4px; }
+.cset input[type=number]{ font-size:1.2rem; padding:9px 10px; }
+.cset input:disabled{ opacity:.4; }
+.tog{ padding:11px 16px; border-width:1.5px; border-radius:10px; font-size:1rem; min-width:76px; }
+.tog[aria-pressed="true"]{ background:var(--g-ink); color:var(--g-bg); border-color:var(--g-ink); }
+.cstats{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin:6px 0 10px; text-align:center; }
+.cstats div{ border:1.5px solid color-mix(in srgb, currentColor 25%, transparent); border-radius:12px; padding:10px 4px; }
+.cstats b{ display:block; font:800 clamp(1.7rem, 8vw, 2.6rem)/1 "Barlow Condensed", "Arial Narrow", sans-serif; font-variant-numeric:tabular-nums; margin-bottom:3px; }
+.cstats span{ font-size:.8rem; font-weight:600; opacity:.75; }
+.cflex{ flex:1; }
+body.locked .cctrl{ visibility:hidden; }
+@media (prefers-reduced-motion: reduce){ .cview.flash{ animation:none; } }
 @media (prefers-reduced-motion: reduce){ body.flash, .num.pop{ animation:none; } body, .gview{ transition:none; } }
 </style>
 </head>
@@ -195,7 +214,10 @@ th:nth-child(-n+2), td:nth-child(-n+2){ text-align:left; }
     <div id="liveWrap" hidden><div class="livecap" id="liveCap"></div><div class="live" id="live"></div></div>
     <div class="next" id="next"></div>
     <button class="chip resbtn" id="resBtn" hidden>View results</button>
-    <button class="gpsbtn" id="gpsBtn" aria-label="GPS measuring for cones">GPS</button>
+    <div class="homebtns" id="homeBtns">
+      <button class="gpsbtn" id="gpsBtn" aria-label="GPS measuring for cones">GPS</button>
+      <button class="gpsbtn" id="cosBtn" aria-label="Change of speed mode">CoS</button>
+    </div>
   </section>
   <div class="strip" id="strip" aria-hidden="true"></div>
   <div class="controls">
@@ -244,6 +266,48 @@ th:nth-child(-n+2), td:nth-child(-n+2){ text-align:left; }
   </div>
 </div>
 
+<div class="gview cview" id="cview" hidden>
+  <div class="ginner">
+    <div class="gtop">
+      <button class="chip" id="cBack">‹ Timer</button>
+      <span class="cclock" id="cClock"></span>
+      <span class="chip" id="cAcc"><i></i><span id="cAccTxt">GPS</span></span>
+    </div>
+    <div class="cset" id="cSet">
+      <label>Recovery speed (km/h)<input type="number" id="cThr" min="3" max="30" step="0.5" inputmode="decimal"></label>
+      <label>Recovery timer<button type="button" class="tog" id="cRecOn" aria-pressed="false">Off</button></label>
+      <label>Recovery time (s)<input type="number" id="cRec" min="5" max="600" inputmode="numeric"></label>
+    </div>
+    <div class="gmain" aria-live="polite">
+      <div class="glabel" id="cLabel"></div>
+      <div class="gnum"><b id="cBig">--</b><span id="cUnit">km/h</span></div>
+      <div class="gsub" id="cSub"></div>
+    </div>
+    <div class="cstats" id="cStats"></div>
+    <div class="cflex"></div>
+    <div class="gctrl cctrl">
+      <button class="main" id="cGo">Start</button>
+      <button id="cRes" disabled>Results</button>
+      <button id="cLock">Lock</button>
+    </div>
+    <p class="gnote">An effort starts when your speed goes above the recovery speed and ends after 1 to 2 s below it. Efforts under 2 s or 5 m are ignored. GPS lags about 1 s, so the start and end of each effort are approximate.</p>
+  </div>
+</div>
+
+<dialog id="cosDlg" aria-labelledby="cosTitle">
+  <div class="sheet">
+    <h2 id="cosTitle">Change of speed</h2>
+    <p class="hint" id="cosMeta"></p>
+    <label class="name">Athlete name<input type="text" id="cosAthlete" maxlength="60" placeholder="Name shown on the report" autocomplete="name"></label>
+    <div class="totals" id="cosTot"></div>
+    <div class="tablewrap"><table id="cosTable"></table></div>
+    <div class="actions">
+      <button type="button" class="ghost" id="cosClose">Close</button>
+      <button type="button" class="save" id="cosShare">Share report</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="dlg" aria-labelledby="dlgTitle">
   <form method="dialog" class="sheet" id="form">
     <h2 id="dlgTitle">Settings</h2>
@@ -273,12 +337,13 @@ th:nth-child(-n+2), td:nth-child(-n+2){ text-align:left; }
   <div class="sheet">
     <h2 id="resTitle">Results</h2>
     <p class="hint" id="resMeta"></p>
+    <label class="name">Athlete name<input type="text" id="athlete" maxlength="60" placeholder="Name shown on the report" autocomplete="name"></label>
     <div class="totals" id="resTot"></div>
     <div class="tablewrap"><table id="resTable"></table></div>
     <p class="note" id="resNote"></p>
     <div class="actions">
       <button type="button" class="ghost" id="resClose">Close</button>
-      <button type="button" class="save" id="resShare">Share</button>
+      <button type="button" class="save" id="resShare">Share report</button>
     </div>
   </div>
 </dialog>
@@ -298,6 +363,7 @@ const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 let cfg = sanitize(load(KEY, DEFAULT));
 let presets = (Array.isArray(load(PKEY, [])) ? load(PKEY, []) : []).map(sanitize).filter(p => p.name);
 let results = load(RKEY, null);
+let athleteName = String(load('hiit-athlete-v1', '') || '').slice(0, 60);
 if (!results || !Array.isArray(results.rows)) results = null;
 
 const $ = id => document.getElementById(id);
@@ -382,11 +448,12 @@ function onFix(pos){
   gps.good = true;
   const here = { lat:c.latitude, lon:c.longitude, t };
   const recording = rec && state === 'running';
-  let v = null;
+  let v = null, segD = 0;
   if (gps.last) {
     const dt = (t - gps.last.t) / 1000;
     if (dt <= 0) return;
     const seg = hav(gps.last, here), implied = seg / dt;
+    segD = seg;
     if (implied > 13) { gps.last = here; return; }          // > 47 km/h: a GPS jump, ignore
     v = (typeof c.speed === 'number' && c.speed >= 0) ? c.speed : implied;
     if (recording) rec.dist += seg * (gps.last.t < rec.t0 ? Math.max(0, (t - rec.t0) / (t - gps.last.t)) : 1);
@@ -395,6 +462,7 @@ function onFix(pos){
   if (v == null) return;
   gps.buf.push(v); if (gps.buf.length > 2) gps.buf.shift();
   gps.speed = gps.buf.reduce((a, b) => a + b, 0) / gps.buf.length;
+  if (cs.running) csFix(gps.speed, t, segD);
   if (recording) {
     if (gps.speed > rec.max) rec.max = gps.speed;
     const dt = (t - rec.lastV.t) / 1000;
@@ -489,7 +557,7 @@ function start(){
   const n = needs(); if (n.gps) gpsStart(); if (n.motion) motionStart();
   if (state === 'idle' || state === 'done') {
     idx = 0; remainingMs = seq[0].d * 1000; lastClosedIdx = -1;
-    results = { name:cfg.name, date:new Date().toISOString(), rows:[] };
+    results = { name:cfg.name, athlete:athleteName, date:new Date().toISOString(), rows:[] };
     state = 'running'; onPhaseStart(seq[0].t === 'work');
   }
   if (rec) rec.lastTick = performance.now();
@@ -597,7 +665,7 @@ function render(){
   }
   renderLive(); renderChip();
   el.resBtn.hidden = !(results && results.rows.length && (state === 'idle' || state === 'done'));
-  $('gpsBtn').hidden = !(state === 'idle' || state === 'done');
+  $('homeBtns').hidden = !(state === 'idle' || state === 'done');
   el.go.textContent = state === 'running' ? 'Pause' : state === 'paused' ? 'Resume' : state === 'done' ? 'Go again' : 'Start';
   el.skip.disabled = !(state === 'running' || state === 'paused');
   el.reset.disabled = state === 'idle';
@@ -641,20 +709,50 @@ function openResults(){
   if (m.gpsSrc) notes.push('No motion sensor was available, so acceleration was estimated from GPS speed.');
   else if (results.rows.some(r => r.type === 'explosive')) notes.push('Peak acceleration is an estimate from the phone’s motion sensor. Compare it only with sessions where the phone was worn the same way.');
   $('resNote').textContent = notes.join(' '); $('resNote').hidden = !notes.length;
+  $('athlete').value = results.athlete || athleteName;
   resDlg.showModal();
 }
+const pad2 = n => String(n).padStart(2, '0');
+const localStamp = iso => { const d = new Date(iso); return { date:d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()), time:pad2(d.getHours()) + ':' + pad2(d.getMinutes()) }; };
+function setAthlete(v){
+  athleteName = String(v || '').trim().slice(0, 60); store('hiit-athlete-v1', athleteName);
+  if (results) { results.athlete = athleteName; store(RKEY, results); }
+}
+function csvOf(R){
+  const esc = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const s = localStamp(R.date);
+  const head = ['athlete', 'date', 'time', 'workout', 'round', 'block', 'type', 'duration_s', 'distance_m', 'avg_speed_kmh', 'max_speed_kmh', 'peak_accel_ms2', 'accel_source', 'gps_ok'];
+  const rows = R.rows.map(r => [
+    R.athlete || '', s.date, s.time, R.name || '', r.rep, r.block, r.type, r.dur,
+    r.type === 'cardio' && r.gps ? r.dist : '', r.type === 'cardio' && r.gps ? r.avg : '', r.gps ? r.max : '',
+    r.type === 'explosive' ? r.acc : '', r.type === 'explosive' ? r.accSrc : '', r.gps ? 'yes' : 'no'
+  ]);
+  return '\ufeff' + [head, ...rows].map(a => a.map(esc).join(',')).join('\r\n');
+}
 async function shareResults(){
-  const m = resModel();
-  const lines = [(results.name || 'HIIT') + ', ' + new Date(results.date).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })];
+  const who = $('athlete'), btn = $('resShare');
+  if (!who.value.trim()) { who.placeholder = 'Enter the athlete name first'; who.focus(); return; }
+  setAthlete(who.value);
+  const m = resModel(), s = localStamp(results.date);
+  const lines = [results.athlete, (results.name || 'HIIT') + ', ' + s.date + ' ' + s.time];
   m.tot.forEach(t => lines.push(t[1] + ': ' + t[0]));
   lines.push('');
   lines.push(m.cols.map(c => c[0]).join(' | '));
   results.rows.forEach(r => lines.push(m.cols.map(c => c[1](r)).join(' | ')));
-  const text = lines.join('\n'), btn = $('resShare');
-  try { if (navigator.share) { await navigator.share({ title:'HIIT results', text }); return; } } catch(e) { if (e && e.name === 'AbortError') return; }
-  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; } catch(e) { btn.textContent = 'Could not copy'; }
-  setTimeout(() => btn.textContent = 'Share', 2000);
+  const text = lines.join('\n'), csv = csvOf(results);
+  const slug = results.athlete.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'athlete';
+  const fname = 'HIIT_' + slug + '_' + s.date + '_' + s.time.replace(':', 'h') + '.csv';
+  let file = null;
+  try { file = new File([csv], fname, { type:'text/csv' }); } catch(e) {}
+  try {
+    if (file && navigator.canShare && navigator.canShare({ files:[file] })) { await navigator.share({ files:[file], title:'HIIT results ' + results.athlete, text }); return; }
+    if (navigator.share) { await navigator.share({ title:'HIIT results ' + results.athlete, text }); return; }
+  } catch(e) { if (e && e.name === 'AbortError') return; }
+  try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' })); a.download = fname; document.body.appendChild(a); a.click(); a.remove(); } catch(e) {}
+  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; } catch(e) { btn.textContent = 'Saved CSV'; }
+  setTimeout(() => btn.textContent = 'Share report', 2000);
 }
+$('athlete').addEventListener('change', e => setAthlete(e.target.value));
 $('resClose').addEventListener('click', () => resDlg.close());
 $('resShare').addEventListener('click', shareResults);
 el.resBtn.addEventListener('click', openResults);
@@ -878,6 +976,183 @@ gv.clear.addEventListener('click', () => {
 gv.chips.querySelectorAll('button').forEach(b => b.addEventListener('click', () => msSetTarget(b.dataset.t)));
 gv.other.addEventListener('input', () => msSetTarget(gv.other.value));
 
+/* ---------- Change of speed ---------- */
+const CS_KEY = 'hiit-cos-cfg-v1', CS_LAST = 'hiit-cos-last-v1';
+const cs = { open:false, running:false, phase:'idle', cur:null, below:0, recEnd:0, lastWhole:null, lastEnd:null, prevPhase:'free', t0:0, timer:null };
+cs.cfg = (c => ({ thr:Math.max(3, Math.min(30, Number(c.thr) || 9)), recOn:!!c.recOn, rec:clamp(c.rec, 5, 600, 30) }))(load(CS_KEY, {}) || {});
+cs.sess = load(CS_LAST, null); if (!cs.sess || !Array.isArray(cs.sess.segs)) cs.sess = null;
+const cv = { view:$('cview'), set:$('cSet'), thr:$('cThr'), recOn:$('cRecOn'), rec:$('cRec'), label:$('cLabel'), big:$('cBig'), unit:$('cUnit'), sub:$('cSub'), stats:$('cStats'), go:$('cGo'), res:$('cRes'), back:$('cBack'), acc:$('cAcc'), accTxt:$('cAccTxt'), clock:$('cClock') };
+function csFillCfg(){
+  cv.thr.value = cs.cfg.thr; cv.rec.value = cs.cfg.rec;
+  cv.recOn.setAttribute('aria-pressed', cs.cfg.recOn); cv.recOn.textContent = cs.cfg.recOn ? 'On' : 'Off';
+  cv.rec.disabled = !cs.cfg.recOn;
+}
+function csReadCfg(){
+  cs.cfg = { thr:Math.max(3, Math.min(30, Math.round((Number(cv.thr.value) || 9) * 2) / 2)), recOn:cv.recOn.getAttribute('aria-pressed') === 'true', rec:clamp(cv.rec.value, 5, 600, 30) };
+  store(CS_KEY, cs.cfg); csFillCfg(); csRender();
+}
+function csFix(v, t, d){
+  const thr = cs.cfg.thr / 3.6, c = cs.cur;
+  if (c) {
+    c.dist += d; if (v > c.max) c.max = v;
+    if (v >= thr) { cs.below = 0; c.lastT = t; c.lastDist = c.dist; }
+    else { if (!cs.below) cs.below = t; if (t - cs.below >= 1000) csEnd(); }
+  } else if (v >= thr) csBegin(v, t);
+}
+function csBegin(v, t){
+  cs.prevPhase = cs.phase;
+  cs.cur = { start:t, lastT:t, dist:0, lastDist:0, max:v, recBefore:cs.lastEnd ? (t - cs.lastEnd) / 1000 : null };
+  cs.below = 0; cs.phase = 'effort';
+  tone(1046, .12); buzz(60);
+}
+function csEnd(){
+  const c = cs.cur; if (!c) return;
+  cs.cur = null; cs.below = 0;
+  const dur = (c.lastT - c.start) / 1000;
+  if (dur < 2 || c.lastDist < 5) {
+    cs.phase = cs.prevPhase === 'recovery' && cs.recEnd > performance.now() ? 'recovery' : (cs.cfg.recOn ? 'go' : 'free');
+    return;
+  }
+  const S = cs.sess.segs;
+  S.push({ n:S.length + 1, start:Math.max(0, Math.round((c.start - cs.t0) / 1000)), dur:+dur.toFixed(1), dist:Math.round(c.lastDist), avg:+(c.lastDist / dur * 3.6).toFixed(1), max:+(c.max * 3.6).toFixed(1), rec:c.recBefore == null ? null : Math.round(c.recBefore) });
+  store(CS_LAST, cs.sess);
+  cs.lastEnd = c.lastT;
+  if (cs.cfg.recOn) { cs.phase = 'recovery'; cs.recEnd = performance.now() + cs.cfg.rec * 1000 - Math.max(0, Date.now() - c.lastT); cs.lastWhole = null; }
+  else cs.phase = 'free';
+  sfx.rest(); buzz([120, 80, 120]);
+}
+function csStart(){
+  csReadCfg();
+  ensureAudio(); wake(); gps.err = null; gpsStart();
+  cs.running = true; cs.t0 = Date.now(); cs.cur = null; cs.below = 0; cs.lastEnd = null;
+  cs.sess = { date:new Date().toISOString(), athlete:athleteName, thr:cs.cfg.thr, recOn:cs.cfg.recOn, rec:cs.cfg.rec, segs:[] };
+  if (cs.cfg.recOn) { cs.phase = 'recovery'; cs.recEnd = performance.now() + 3000; cs.lastWhole = null; }
+  else cs.phase = 'free';
+  csRender();
+}
+function csStop(){
+  if (cs.cur) csEnd();
+  cs.running = false; cs.phase = 'idle';
+  if (cs.sess) store(CS_LAST, cs.sess);
+  sfx.done(); sleep();
+  csRender();
+  if (cs.sess && cs.sess.segs.length) cosOpenResults();
+}
+function csTick(){
+  if (cs.running && cs.phase === 'recovery') {
+    const rem = cs.recEnd - performance.now(), w = Math.ceil(rem / 1000);
+    if (w !== cs.lastWhole) {
+      cs.lastWhole = w;
+      if (w >= 1 && w <= 3) { sfx.count(); buzz(80); cv.view.classList.remove('flash'); void cv.view.offsetWidth; cv.view.classList.add('flash'); }
+    }
+    if (rem <= 0) { cs.phase = 'go'; sfx.work(); buzz(400); }
+  }
+  csRender();
+}
+let csStatsKey = '';
+function csRender(){
+  if (!cs.open) return;
+  let txt, cls = '';
+  if (gps.err) { txt = gps.err; cls = 'bad'; }
+  else if (gps.watch === null) txt = 'GPS off';
+  else if (gps.acc == null || Date.now() - gps.lastFixAt > 5000) { txt = 'GPS searching'; cls = 'mid'; }
+  else { txt = 'GPS ±' + Math.round(gps.acc) + ' m'; cls = gps.acc <= 10 ? 'ok' : gps.acc <= 30 ? 'mid' : 'bad'; }
+  cv.accTxt.textContent = txt; cv.acc.className = 'chip ' + cls;
+  const fresh = gps.good && Date.now() - gps.lastFixAt < 4000, spd = fresh ? (gps.speed * 3.6).toFixed(1) : '--';
+  const S = cs.sess ? cs.sess.segs : [], ph = cs.running ? cs.phase : 'idle';
+  let label, big = spd, unit = 'km/h', sub = '';
+  if (ph === 'idle') label = S.length ? 'Session finished. Tap Results to see and share it' : 'Every effort above ' + cs.cfg.thr + ' km/h is recorded';
+  else if (ph === 'effort') { label = 'Effort ' + (S.length + 1); sub = Math.max(0, (Date.now() - cs.cur.start) / 1000).toFixed(1) + ' s, ' + Math.round(cs.cur.dist) + ' m'; }
+  else if (ph === 'recovery') { label = S.length ? 'Recovery' : 'Get ready'; big = Math.max(0, Math.ceil((cs.recEnd - performance.now()) / 1000)); unit = 's'; sub = fresh ? spd + ' km/h' : ''; }
+  else if (ph === 'go') { label = 'Go! Accelerate above ' + cs.cfg.thr + ' km/h'; big = 'GO'; unit = ''; }
+  else label = 'Below ' + cs.cfg.thr + ' km/h';
+  if (cs.running && !fresh && ph !== 'recovery' && ph !== 'go') label = 'Waiting for GPS';
+  if (cv.label.textContent !== label) cv.label.textContent = label;
+  if (cv.big.textContent !== String(big)) cv.big.textContent = big;
+  cv.unit.textContent = unit; cv.sub.textContent = sub;
+  cv.view.classList.toggle('effort', ph === 'effort' || ph === 'go');
+  cv.view.classList.toggle('recovery', ph === 'recovery');
+  const last = S[S.length - 1], td = S.reduce((a, s) => a + s.dist, 0), tt = S.reduce((a, s) => a + s.dur, 0);
+  const cells = [[last ? last.max.toFixed(1) : '--', 'last max km/h'], [tt ? (td / tt * 3.6).toFixed(1) : '--', 'avg so far km/h'], [S.length, 'efforts']];
+  const key = cells.join(';');
+  if (key !== csStatsKey) { csStatsKey = key; cv.stats.innerHTML = cells.map(c => '<div><b>' + c[0] + '</b><span>' + c[1] + '</span></div>').join(''); }
+  cv.set.hidden = cs.running;
+  cv.go.textContent = cs.running ? 'Stop' : 'Start';
+  cv.res.disabled = cs.running || !S.length;
+  cv.back.disabled = cs.running;
+  cv.clock.textContent = cs.running ? fmt((Date.now() - cs.t0) / 1000) : '';
+}
+function csOpen(){
+  cs.open = true; cv.view.hidden = false; ensureAudio();
+  gps.err = null; gpsStart(); wake(); csFillCfg();
+  clearInterval(cs.timer); cs.timer = setInterval(csTick, 100); csRender();
+}
+function csClose(){
+  if (cs.running) return;
+  cs.open = false; cv.view.hidden = true; clearInterval(cs.timer);
+  if (state !== 'running' && state !== 'paused') { gpsStop(); sleep(); }
+  render();
+}
+
+const cosDlg = $('cosDlg');
+const slugOf = n => String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'athlete';
+function cosModel(R){
+  const S = R.segs, td = S.reduce((a, s) => a + s.dist, 0), tt = S.reduce((a, s) => a + s.dur, 0);
+  return {
+    tot:[[S.length, 'Efforts'], [td >= 1000 ? (td / 1000).toFixed(2) + ' km' : td + ' m', 'Effort distance'], [tt ? (td / tt * 3.6).toFixed(1) : '--', 'Avg speed km/h'],
+         [Math.max(...S.map(s => s.max)).toFixed(1), 'Top speed km/h'], [(S.reduce((a, s) => a + s.max, 0) / S.length).toFixed(1), 'Mean of max km/h']],
+    cols:[['#', s => s.n], ['Start', s => fmt(s.start)], ['Time s', s => s.dur.toFixed(1)], ['Dist m', s => s.dist], ['Avg km/h', s => s.avg.toFixed(1)], ['Max km/h', s => s.max.toFixed(1)], ['Rec s', s => s.rec == null ? '–' : s.rec]]
+  };
+}
+function cosOpenResults(){
+  const R = cs.sess; if (!R || !R.segs.length) return;
+  const s = localStamp(R.date), m = cosModel(R);
+  $('cosMeta').textContent = s.date + ' ' + s.time + ', efforts above ' + R.thr + ' km/h, ' + (R.recOn ? R.rec + ' s recovery' : 'free mode');
+  $('cosAthlete').value = R.athlete || athleteName;
+  $('cosTot').innerHTML = m.tot.map(t => '<div><b>' + t[0] + '</b><span>' + t[1] + '</span></div>').join('');
+  $('cosTable').innerHTML = '<thead><tr>' + m.cols.map(c => '<th>' + c[0] + '</th>').join('') + '</tr></thead><tbody>' +
+    R.segs.map(x => '<tr>' + m.cols.map(c => '<td>' + c[1](x) + '</td>').join('') + '</tr>').join('') + '</tbody>';
+  cosDlg.showModal();
+}
+async function cosShare(){
+  const R = cs.sess, who = $('cosAthlete'), btn = $('cosShare');
+  if (!R || !R.segs.length) return;
+  if (!who.value.trim()) { who.placeholder = 'Enter the athlete name first'; who.focus(); return; }
+  setAthlete(who.value); R.athlete = athleteName; store(CS_LAST, R);
+  const s = localStamp(R.date), m = cosModel(R);
+  const lines = [R.athlete, 'Change of speed, ' + s.date + ' ' + s.time, 'Efforts above ' + R.thr + ' km/h, ' + (R.recOn ? R.rec + ' s recovery' : 'free mode')];
+  m.tot.forEach(t => lines.push(t[1] + ': ' + t[0]));
+  lines.push('');
+  lines.push(m.cols.map(c => c[0]).join(' | '));
+  R.segs.forEach(x => lines.push(m.cols.map(c => c[1](x)).join(' | ')));
+  const text = lines.join('\n');
+  const esc = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const head = ['athlete', 'date', 'time', 'mode', 'threshold_kmh', 'recovery_s', 'effort', 'start_s', 'duration_s', 'distance_m', 'avg_speed_kmh', 'max_speed_kmh', 'recovery_before_s'];
+  const rows = R.segs.map(x => [R.athlete, s.date, s.time, R.recOn ? 'timed' : 'free', R.thr, R.recOn ? R.rec : '', x.n, x.start, x.dur, x.dist, x.avg, x.max, x.rec == null ? '' : x.rec]);
+  const csv = '\ufeff' + [head, ...rows].map(a => a.map(esc).join(',')).join('\r\n');
+  const fname = 'CoS_' + slugOf(R.athlete) + '_' + s.date + '_' + s.time.replace(':', 'h') + '.csv';
+  let file = null;
+  try { file = new File([csv], fname, { type:'text/csv' }); } catch(e) {}
+  try {
+    if (file && navigator.canShare && navigator.canShare({ files:[file] })) { await navigator.share({ files:[file], title:'Change of speed ' + R.athlete, text }); return; }
+    if (navigator.share) { await navigator.share({ title:'Change of speed ' + R.athlete, text }); return; }
+  } catch(e) { if (e && e.name === 'AbortError') return; }
+  try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' })); a.download = fname; document.body.appendChild(a); a.click(); a.remove(); } catch(e) {}
+  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; } catch(e) { btn.textContent = 'Saved CSV'; }
+  setTimeout(() => btn.textContent = 'Share report', 2000);
+}
+$('cosBtn').addEventListener('click', csOpen);
+cv.back.addEventListener('click', csClose);
+cv.go.addEventListener('click', () => cs.running ? csStop() : csStart());
+cv.res.addEventListener('click', cosOpenResults);
+$('cLock').addEventListener('click', lockOn);
+cv.thr.addEventListener('change', csReadCfg);
+cv.rec.addEventListener('change', csReadCfg);
+cv.recOn.addEventListener('click', () => { cv.recOn.setAttribute('aria-pressed', cv.recOn.getAttribute('aria-pressed') !== 'true'); csReadCfg(); });
+$('cosClose').addEventListener('click', () => cosDlg.close());
+$('cosShare').addEventListener('click', cosShare);
+$('cosAthlete').addEventListener('change', e => setAthlete(e.target.value));
+
 /* ---------- wiring ---------- */
 el.go.addEventListener('click', () => state === 'running' ? pause() : start());
 el.skip.addEventListener('click', skip);
@@ -885,7 +1160,7 @@ el.reset.addEventListener('click', reset);
 el.set.addEventListener('click', openSettings);
 el.chip.addEventListener('click', () => { gps.err = null; gpsStart(); if (needs().motion) motionStart(); renderChip(); });
 el.snd.addEventListener('click', () => { soundOn = !soundOn; ensureAudio(); el.snd.textContent = soundOn ? 'Sound' : 'Muted'; el.snd.setAttribute('aria-pressed', soundOn); if (soundOn) sfx.count(); });
-document.addEventListener('keydown', e => { if (e.code === 'Space' && !locked && !ms.open && !dlg.open && !resDlg.open && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { e.preventDefault(); el.go.click(); } });
+document.addEventListener('keydown', e => { if (e.code === 'Space' && !locked && !ms.open && !cs.open && !dlg.open && !resDlg.open && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { e.preventDefault(); el.go.click(); } });
 
 build(); reset();
 if ('serviceWorker' in navigator && location.protocol === 'https:' && !location.hostname.endsWith('claude.ai')) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
