@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HIIT Timer</title>
+<meta name="theme-color" content="#15171C">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9ECEF; --ink:#15171C; --muted:#5A616C; --card:#FFFFFF; --line:#C8CDD5;
+  --work:#F4C21B; --work-ink:#17140A;
+  --rest:#1D6A86; --rest-ink:#F1F7FA;
+  --prep:#2A2E37; --prep-ink:#F2F3F5;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#15171C; --ink:#E9ECEF; --muted:#9AA1AC; --card:#1F2229; --line:#363B45; }
+}
+:root[data-theme="dark"]{ --bg:#15171C; --ink:#E9ECEF; --muted:#9AA1AC; --card:#1F2229; --line:#363B45; }
+html{ scroll-padding-top:env(safe-area-inset-top,0px); }
+html,body{ height:100%; margin:0; }
+*,*::before,*::after{ box-sizing:inherit; }
+[hidden]{ display:none !important; }
+
+body{
+  --stage:var(--bg); --stage-ink:var(--ink);
+  background:var(--stage); color:var(--stage-ink);
+  font-family:Barlow, "Helvetica Neue", Arial, sans-serif;
+  display:flex; flex-direction:column;
+  transition:background-color .25s ease, color .25s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+body[data-phase="work"]{ --stage:var(--work); --stage-ink:var(--work-ink); }
+body[data-phase="rest"],body[data-phase="done"]{ --stage:var(--rest); --stage-ink:var(--rest-ink); }
+body[data-phase="prep"]{ --stage:var(--prep); --stage-ink:var(--prep-ink); }
+body.flash{ animation:flash .4s ease-out; }
+@keyframes flash{ from{ background-color:var(--work); color:var(--work-ink);} }
+
+.app{ flex:1; display:flex; flex-direction:column; width:100%; max-width:720px; margin:0 auto; padding:14px 18px 18px; min-height:0; user-select:none; }
+.top{ display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:600; font-size:1.02rem; font-variant-numeric:tabular-nums; min-height:34px; }
+.top .left{ opacity:.85; } .top .right{ opacity:.7; text-align:right; }
+
+.chip{ font:600 .88rem/1 Barlow, sans-serif; padding:7px 11px; border-radius:999px; display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
+.chip i{ width:8px; height:8px; border-radius:50%; background:currentColor; opacity:.45; }
+.chip.ok i{ background:#22A565; opacity:1; } .chip.mid i{ background:#F08A00; opacity:1; } .chip.bad i{ background:#E0402F; opacity:1; }
+
+.stage{ flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; min-height:0; }
+.phase{ font-family:"Barlow Condensed", "Arial Narrow", sans-serif; font-weight:800; font-size:clamp(2.3rem, 11vw, 4.5rem); line-height:1; }
+.num{ font-family:"Barlow Condensed", "Arial Narrow", sans-serif; font-weight:800; font-size:min(64vw, 46vh, 26rem); line-height:.86; letter-spacing:-.02em; font-variant-numeric:tabular-nums; margin:.04em 0 .08em; }
+.num.withlive{ font-size:min(46vw, 30vh, 18rem); }
+.num.long{ font-size:min(30vw, 22vh, 12rem); margin:.25em 0; }
+.num.pop{ animation:pop .45s cubic-bezier(.2,.9,.3,1.3); }
+@keyframes pop{ from{ transform:scale(1.14); } }
+.next{ font-size:1.12rem; font-weight:500; opacity:.8; min-height:1.5em; max-width:34ch; }
+.livecap{ font-size:.82rem; font-weight:600; text-transform:uppercase; letter-spacing:.07em; opacity:.75; margin:4px 0 2px; }
+.live{ display:flex; gap:26px; justify-content:center; margin:2px 0 10px; }
+.live div{ display:flex; flex-direction:column; align-items:center; }
+.live b{ font:800 clamp(2.3rem, 12vw, 4rem)/1 "Barlow Condensed", "Arial Narrow", sans-serif; font-variant-numeric:tabular-nums; }
+.live span{ font-size:.88rem; font-weight:600; opacity:.75; }
+.resbtn{ margin-top:16px; }
+
+.strip{ display:flex; gap:5px; align-items:flex-end; height:16px; margin:14px 0 18px; }
+.cyc{ flex:1; display:flex; gap:2px; align-items:flex-end; height:100%; min-width:0; }
+.seg{ position:relative; overflow:hidden; border-radius:2px; min-width:1px; background:color-mix(in srgb, currentColor 22%, transparent); }
+.seg.w{ height:100%; } .seg.r{ height:40%; }
+.seg i{ position:absolute; inset:0 auto 0 0; width:0; background:currentColor; }
+
+button{
+  font:600 1.05rem/1 Barlow, "Helvetica Neue", Arial, sans-serif;
+  padding:16px 10px; border-radius:14px; cursor:pointer; color:inherit; background:transparent;
+  border:2px solid color-mix(in srgb, currentColor 40%, transparent);
+}
+button:disabled{ opacity:.35; cursor:default; }
+button:focus-visible, input:focus-visible{ outline:3px solid currentColor; outline-offset:3px; }
+.controls{ display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; }
+.controls button:not(.main){ font-size:.92rem; padding:14px 2px; border-radius:12px; }
+button.main{ grid-column:1 / -1; background:var(--stage-ink); color:var(--stage); border-color:var(--stage-ink); font-size:1.35rem; padding:20px; }
+@media (min-width:640px) and (min-height:700px){ .controls{ grid-template-columns:2.4fr repeat(5, 1fr); } button.main{ grid-column:auto; } }
+
+/* lock */
+body.locked .controls{ visibility:hidden; }
+.lock{ position:fixed; inset:0; z-index:40; touch-action:none; display:flex; align-items:flex-end; justify-content:center; padding:0 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
+.unlock{ position:relative; overflow:hidden; background:var(--stage-ink); color:var(--stage); border:0; border-radius:999px; padding:18px 30px; font-size:1.1rem; display:inline-flex; gap:10px; align-items:center; touch-action:none; -webkit-user-select:none; user-select:none; }
+.unlock i{ position:absolute; inset:0 auto 0 0; width:0; background:color-mix(in srgb, var(--stage) 40%, transparent); }
+.unlock svg, .unlock span{ position:relative; }
+
+/* dialogs */
+dialog{
+  width:min(560px, calc(100% - 24px)); max-height:calc(100% - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+  border:0; border-radius:20px; padding:0; background:var(--card); color:var(--ink); overflow:auto;
+}
+dialog::backdrop{ background:rgba(10,12,16,.55); }
+.sheet{ padding:22px 20px 20px; }
+.sheet h2{ font:800 2rem/1 "Barlow Condensed", "Arial Narrow", sans-serif; margin:0 0 4px; }
+.sheet p.hint{ margin:0 0 18px; color:var(--muted); font-size:.98rem; line-height:1.4; }
+.sec{ font-size:.82rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; }
+.presets{ display:flex; flex-direction:column; gap:8px; margin:0 0 22px; }
+.preset{ display:grid; grid-template-columns:1fr auto; gap:8px; }
+.pload{ text-align:left; border:1px solid var(--line); color:var(--ink); padding:12px 14px; display:flex; flex-direction:column; gap:5px; }
+.pload b{ font-size:1.12rem; }
+.pload span{ font-weight:500; font-size:.92rem; color:var(--muted); font-variant-numeric:tabular-nums; line-height:1.3; }
+.pload.on{ border:2px solid var(--ink); }
+.pdel{ border:1px solid var(--line); color:var(--muted); font-size:.92rem; padding:10px 12px; }
+.pdel.arm{ border-color:#C0392B; color:#C0392B; }
+.blocks{ display:flex; flex-direction:column; gap:10px; margin-bottom:12px; }
+.block{ display:grid; grid-template-columns:auto 1fr 1fr auto; gap:10px; align-items:end; padding:12px; border:1px solid var(--line); border-radius:14px; }
+.block .n{ font:800 1.6rem/1 "Barlow Condensed", sans-serif; align-self:center; min-width:1.2em; color:var(--muted); }
+label{ display:flex; flex-direction:column; gap:5px; font-size:.9rem; font-weight:600; color:var(--muted); }
+input[type=number], input[type=text]{
+  font:600 1.3rem/1 Barlow, sans-serif; width:100%; padding:10px 12px; border-radius:10px;
+  border:1px solid var(--line); background:var(--bg); color:var(--ink); font-variant-numeric:tabular-nums;
+}
+.block label.w input{ border-left:5px solid var(--work); }
+.block label.r input{ border-left:5px solid var(--rest); }
+.types{ grid-column:1 / -1; display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+.types label{ display:block; position:relative; }
+.types input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
+.types span{ display:block; text-align:center; padding:10px 4px; border:1px solid var(--line); border-radius:10px; font-weight:600; font-size:.95rem; color:var(--muted); }
+.types input:checked + span{ background:var(--ink); color:var(--card); border-color:var(--ink); }
+.types input:focus-visible + span{ outline:3px solid var(--ink); outline-offset:2px; }
+.del{ padding:10px 12px; font-size:.95rem; border-width:1px; border-color:var(--line); color:var(--muted); }
+.add{ width:100%; border-style:dashed; border-color:var(--line); color:var(--ink); }
+.row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:18px 0 6px; }
+.total{ display:flex; justify-content:space-between; align-items:baseline; margin:14px 0 18px; padding-top:14px; border-top:1px solid var(--line); font-weight:600; }
+.total b{ font:800 1.9rem/1 "Barlow Condensed", sans-serif; font-variant-numeric:tabular-nums; }
+.name{ margin:0 0 16px; }
+.actions{ display:grid; grid-template-columns:1fr 2fr; gap:10px; }
+.actions .save{ background:var(--ink); color:var(--card); border-color:var(--ink); }
+.actions .ghost{ border-color:var(--line); color:var(--ink); }
+.linkish{ background:none; border:0; padding:12px 0 0; color:var(--muted); font-size:.95rem; text-decoration:underline; }
+
+.totals{ display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; margin:0 0 16px; }
+.totals div{ border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+.totals b{ display:block; font:800 1.8rem/1 "Barlow Condensed", sans-serif; font-variant-numeric:tabular-nums; margin-bottom:4px; }
+.totals span{ font-size:.85rem; color:var(--muted); font-weight:600; }
+.tablewrap{ overflow-x:auto; margin:0 0 12px; }
+table{ width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:.98rem; }
+th{ text-align:right; font-size:.76rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+td{ text-align:right; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th:nth-child(-n+2), td:nth-child(-n+2){ text-align:left; }
+.note{ font-size:.88rem; color:var(--muted); margin:0 0 16px; line-height:1.4; }
+
+/* GPS measuring */
+.gpsbtn{ width:76px; height:76px; border-radius:50%; padding:0; margin-top:18px; font:800 1.35rem/1 "Barlow Condensed", "Arial Narrow", sans-serif; letter-spacing:.04em; display:inline-flex; align-items:center; justify-content:center; border:2.5px solid currentColor; }
+.gview{ --g-bg:var(--bg); --g-ink:var(--ink); position:fixed; inset:0; z-index:30; background:var(--g-bg); color:var(--g-ink); display:flex; padding:calc(14px + env(safe-area-inset-top, 0px)) 18px calc(18px + env(safe-area-inset-bottom, 0px)); overflow:auto; transition:background-color .2s; user-select:none; }
+.gview.reached{ --g-bg:var(--work); --g-ink:var(--work-ink); }
+.ginner{ width:100%; max-width:720px; margin:0 auto; display:flex; flex-direction:column; flex:1; min-height:0; }
+.gtop{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.gtop .chip{ border:1.5px solid color-mix(in srgb, currentColor 40%, transparent); }
+.gmain{ text-align:center; padding:18px 0 8px; }
+.glabel{ font-weight:600; font-size:1.05rem; opacity:.85; min-height:2.6em; max-width:30ch; margin:0 auto; }
+.gnum{ display:flex; align-items:baseline; justify-content:center; gap:8px; font-family:"Barlow Condensed", "Arial Narrow", sans-serif; font-weight:800; }
+.gnum b{ font-size:min(36vw, 22vh, 15rem); line-height:.9; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+.gnum span{ font-size:clamp(1.8rem, 8vw, 3rem); opacity:.7; }
+.gsub{ font-weight:500; opacity:.75; min-height:1.4em; font-variant-numeric:tabular-nums; }
+.gtarget{ margin:10px 0; }
+.gtarget > span{ display:block; font-size:.82rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; opacity:.7; margin-bottom:8px; }
+.gchips{ display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
+.gchips button{ font-size:.95rem; padding:11px 2px; border-width:1.5px; border-radius:10px; }
+.gchips button.on{ background:var(--g-ink); color:var(--g-bg); border-color:var(--g-ink); }
+.gchips input[type=number]{ font:600 .95rem/1 Barlow, sans-serif; padding:10px 4px; border-radius:10px; border:1.5px solid color-mix(in srgb, currentColor 40%, transparent); background:transparent; color:inherit; text-align:center; }
+.gchips input.on{ border-color:var(--g-ink); border-width:2.5px; }
+.cones{ list-style:none; margin:8px 0 12px; padding:0; flex:1; min-height:60px; overflow:auto; }
+.cones li{ display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; padding:10px 0; border-top:1px solid color-mix(in srgb, currentColor 18%, transparent); font-variant-numeric:tabular-nums; }
+.cones b{ font:800 1.3rem/1 "Barlow Condensed", sans-serif; }
+.cones span{ font-size:.95rem; line-height:1.35; }
+.cones em{ font-style:normal; font-size:.85rem; opacity:.65; }
+.gctrl{ display:grid; grid-template-columns:2fr 1fr 1fr; gap:8px; }
+.gctrl .main{ grid-column:auto; background:var(--g-ink); color:var(--g-bg); border-color:var(--g-ink); font-size:1.2rem; padding:18px 8px; }
+.gctrl button:not(.main){ font-size:.95rem; }
+.gctrl .arm{ border-color:#C0392B; color:#C0392B; }
+.gnote{ font-size:.85rem; opacity:.65; line-height:1.4; margin:10px 0 0; text-align:center; }
+@media (prefers-reduced-motion: reduce){ body.flash, .num.pop{ animation:none; } body, .gview{ transition:none; } }
+</style>
+</head>
+<body data-phase="idle">
+<main class="app">
+  <div class="top">
+    <span class="left" id="cycle"></span>
+    <button class="chip" id="gpsChip" hidden><i></i><span id="gpsTxt">GPS</span></button>
+    <span class="right" id="left"></span>
+  </div>
+  <section class="stage" aria-live="polite">
+    <div class="phase" id="phase">Ready</div>
+    <div class="num long" id="num"></div>
+    <div id="liveWrap" hidden><div class="livecap" id="liveCap"></div><div class="live" id="live"></div></div>
+    <div class="next" id="next"></div>
+    <button class="chip resbtn" id="resBtn" hidden>View results</button>
+    <button class="gpsbtn" id="gpsBtn" aria-label="GPS measuring for cones">GPS</button>
+  </section>
+  <div class="strip" id="strip" aria-hidden="true"></div>
+  <div class="controls">
+    <button class="main" id="go">Start</button>
+    <button id="skip" disabled>Skip</button>
+    <button id="reset" disabled>Reset</button>
+    <button id="snd" aria-pressed="true">Sound</button>
+    <button id="set">Setup</button>
+    <button id="lockBtn">Lock</button>
+  </div>
+</main>
+
+<div class="lock" id="lock" hidden>
+  <button class="unlock" id="unlock" aria-label="Hold to unlock">
+    <i id="unlockBar"></i>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+    <span>Hold to unlock</span>
+  </button>
+</div>
+
+<div class="gview" id="gview" hidden>
+  <div class="ginner">
+    <div class="gtop">
+      <button class="chip" id="gBack">‹ Timer</button>
+      <span class="chip" id="gAcc"><i></i><span id="gAccTxt">GPS</span></span>
+    </div>
+    <div class="gmain" aria-live="polite">
+      <div class="glabel" id="gLabel"></div>
+      <div class="gnum"><b id="gDist">--</b><span>m</span></div>
+      <div class="gsub" id="gSub"></div>
+    </div>
+    <div class="gtarget">
+      <span>Target spacing</span>
+      <div class="gchips" id="gChips">
+        <button data-t="0">Off</button><button data-t="5">5 m</button><button data-t="10">10 m</button><button data-t="20">20 m</button>
+        <input type="number" id="gOther" min="1" max="1000" step="0.5" inputmode="decimal" placeholder="Other" aria-label="Other target in metres">
+      </div>
+    </div>
+    <ol class="cones" id="cones"></ol>
+    <div class="gctrl">
+      <button class="main" id="gDrop">Drop first cone</button>
+      <button id="gUndo">Undo</button>
+      <button id="gClear">Clear</button>
+    </div>
+    <p class="gnote">Each cone is averaged over 5 s, so stand still on it. Phone GPS is about ±2–5 m in open sky, away from buildings. For gaps under 20 m, a tape measure is more accurate.</p>
+  </div>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <form method="dialog" class="sheet" id="form">
+    <h2 id="dlgTitle">Settings</h2>
+    <p class="hint">Each block is work then rest, run in order, and the whole sequence repeats. Cardio records speed and distance by GPS. Explosive records peak acceleration and max speed. Gym records nothing.</p>
+    <div id="presetWrap" hidden>
+      <div class="sec">My workouts</div>
+      <div class="presets" id="presets"></div>
+      <div class="sec">Edit</div>
+    </div>
+    <div class="blocks" id="blocks"></div>
+    <button type="button" class="add" id="addBlock">Add block</button>
+    <div class="row">
+      <label>Repetitions<input type="number" id="reps" min="1" max="99" inputmode="numeric"></label>
+      <label>Countdown before work (s)<input type="number" id="warn" min="0" max="10" inputmode="numeric"></label>
+    </div>
+    <div class="total"><span>Total time</span><b id="tot">0:00</b></div>
+    <label class="name">Name (optional, saves it to My workouts)<input type="text" id="wname" maxlength="40" placeholder="e.g. Rehab conditioning" autocomplete="off"></label>
+    <div class="actions">
+      <button type="button" class="ghost" id="cancel">Cancel</button>
+      <button type="button" class="save" id="save">Save</button>
+    </div>
+    <button type="button" class="linkish" id="defaults">Restore 5/15 + 40/20, 15 repetitions</button>
+  </form>
+</dialog>
+
+<dialog id="resDlg" aria-labelledby="resTitle">
+  <div class="sheet">
+    <h2 id="resTitle">Results</h2>
+    <p class="hint" id="resMeta"></p>
+    <div class="totals" id="resTot"></div>
+    <div class="tablewrap"><table id="resTable"></table></div>
+    <p class="note" id="resNote"></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="resClose">Close</button>
+      <button type="button" class="save" id="resShare">Share</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+const TYPES = { gym:'Gym', explosive:'Explosive', cardio:'Cardio' };
+const DEFAULT = { name:'', blocks:[{w:5,r:15,type:'gym'},{w:40,r:20,type:'gym'}], reps:15, warn:3 };
+const KEY = 'hiit-config-v1', PKEY = 'hiit-presets-v1', RKEY = 'hiit-last-results-v1';
+const clamp = (v, lo, hi, def) => { v = Math.round(Number(v)); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def; };
+function sanitize(c){
+  const blocks = (Array.isArray(c && c.blocks) ? c.blocks : DEFAULT.blocks).slice(0, 10)
+    .map(b => ({ w:clamp(b.w, 1, 3600, 30), r:clamp(b.r, 0, 3600, 15), type:TYPES[b.type] ? b.type : 'gym' }));
+  return { name:String((c && c.name) || '').trim().slice(0, 40), blocks: blocks.length ? blocks : DEFAULT.blocks.map(b => ({...b})), reps:clamp(c && c.reps, 1, 99, 10), warn:clamp(c && c.warn, 0, 10, 3) };
+}
+const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch(e) { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {} };
+let cfg = sanitize(load(KEY, DEFAULT));
+let presets = (Array.isArray(load(PKEY, [])) ? load(PKEY, []) : []).map(sanitize).filter(p => p.name);
+let results = load(RKEY, null);
+if (!results || !Array.isArray(results.rows)) results = null;
+
+const $ = id => document.getElementById(id);
+const el = { body:document.body, cycle:$('cycle'), left:$('left'), phase:$('phase'), num:$('num'), next:$('next'), strip:$('strip'), go:$('go'), skip:$('skip'), reset:$('reset'), snd:$('snd'), set:$('set'), chip:$('gpsChip'), chipTxt:$('gpsTxt'), liveWrap:$('liveWrap'), liveCap:$('liveCap'), live:$('live'), resBtn:$('resBtn') };
+const fmt = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, '0'); return h ? h + ':' + String(m).padStart(2, '0') + ':' + x : m + ':' + x; };
+const needs = () => ({ gps:cfg.blocks.some(b => b.type !== 'gym'), motion:cfg.blocks.some(b => b.type === 'explosive') });
+
+/* ---------- sequence ---------- */
+let seq = [], TOTAL = 0, fills = [];
+function phasesOf(c){
+  const out = [];
+  if (c.warn > 0) out.push({ t:'prep', d:c.warn, c:1 });
+  for (let k = 1; k <= c.reps; k++) c.blocks.forEach((b, i) => {
+    out.push({ t:'work', d:b.w, c:k, b:i + 1, type:b.type });
+    if (b.r > 0) out.push({ t:'rest', d:b.r, c:k, b:i + 1 });
+  });
+  return out;
+}
+const totalOf = c => phasesOf(c).reduce((a, s) => a + s.d, 0);
+function build(){
+  seq = phasesOf(cfg);
+  TOTAL = seq.reduce((a, s) => a + s.d, 0);
+  el.strip.innerHTML = ''; fills = seq.map(() => null);
+  let group = null, cur = 0;
+  seq.forEach((s, i) => {
+    if (s.t === 'prep') return;
+    if (s.c !== cur) { cur = s.c; group = document.createElement('div'); group.className = 'cyc'; el.strip.appendChild(group); }
+    const d = document.createElement('div'); d.className = 'seg ' + (s.t === 'work' ? 'w' : 'r'); d.style.flex = s.d;
+    const f = document.createElement('i'); d.appendChild(f); fills[i] = f; group.appendChild(d);
+  });
+  el.strip.style.gap = cfg.reps > 30 ? '2px' : '5px';
+}
+
+let state = 'idle', idx = 0, phaseEnd = 0, remainingMs = 0, lastWhole = null, loop = null;
+
+/* ---------- sound ---------- */
+let ctx = null, soundOn = true;
+function ensureAudio(){ try { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); } catch(e) {} }
+function tone(freq, dur, when = 0, vol = .28, type = 'square'){
+  if (!soundOn || !ctx) return;
+  const t = ctx.currentTime + when, o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur + .03);
+}
+const sfx = {
+  count: () => tone(880, .16),
+  work:  () => tone(1320, .6, 0, .32),
+  rest:  () => { tone(660, .16); tone(494, .3, .19); },
+  done:  () => { tone(784, .2, 0, .25, 'triangle'); tone(988, .2, .22, .25, 'triangle'); tone(1319, .8, .44, .3, 'triangle'); }
+};
+const buzz = p => { if (navigator.vibrate) try { navigator.vibrate(p); } catch(e) {} };
+
+/* ---------- keep screen awake ---------- */
+let wl = null, locked = false;
+async function wake(){ try { if ('wakeLock' in navigator && !wl) { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => wl = null); } } catch(e) {} }
+function sleep(){ if (locked) return; try { wl && wl.release(); } catch(e) {} wl = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (state === 'running' || locked)) wake(); });
+
+/* ---------- GPS ---------- */
+const gps = { watch:null, last:null, good:false, acc:null, err:null, speed:0, buf:[], lastFixAt:0 };
+function hav(a, b){ const R = 6371000, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lon - a.lon) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+function gpsStart(){
+  if (gps.watch !== null) return;
+  if (!('geolocation' in navigator)) { gps.err = 'No GPS'; return; }
+  gps.err = null;
+  try {
+    gps.watch = navigator.geolocation.watchPosition(onFix, e => { gps.err = e.code === 1 ? 'GPS blocked' : null; if (e.code === 1) gpsStop(true); }, { enableHighAccuracy:true, maximumAge:0, timeout:20000 });
+  } catch(e) { gps.err = 'GPS blocked'; }
+}
+function gpsStop(keepErr){
+  if (gps.watch !== null) try { navigator.geolocation.clearWatch(gps.watch); } catch(e) {}
+  gps.watch = null; gps.last = null; gps.good = false; gps.acc = null; gps.buf = []; gps.speed = 0;
+  if (!keepErr) gps.err = null;
+}
+function onFix(pos){
+  const c = pos.coords, t = pos.timestamp || Date.now();
+  gps.acc = c.accuracy; gps.err = null; gps.lastFixAt = Date.now();
+  if (ms.open) msFix(c);
+  if (!(c.accuracy <= 30)) { gps.good = false; return; }
+  gps.good = true;
+  const here = { lat:c.latitude, lon:c.longitude, t };
+  const recording = rec && state === 'running';
+  let v = null;
+  if (gps.last) {
+    const dt = (t - gps.last.t) / 1000;
+    if (dt <= 0) return;
+    const seg = hav(gps.last, here), implied = seg / dt;
+    if (implied > 13) { gps.last = here; return; }          // > 47 km/h: a GPS jump, ignore
+    v = (typeof c.speed === 'number' && c.speed >= 0) ? c.speed : implied;
+    if (recording) rec.dist += seg * (gps.last.t < rec.t0 ? Math.max(0, (t - rec.t0) / (t - gps.last.t)) : 1);
+  } else if (typeof c.speed === 'number' && c.speed >= 0) v = c.speed;
+  gps.last = here;
+  if (v == null) return;
+  gps.buf.push(v); if (gps.buf.length > 2) gps.buf.shift();
+  gps.speed = gps.buf.reduce((a, b) => a + b, 0) / gps.buf.length;
+  if (recording) {
+    if (gps.speed > rec.max) rec.max = gps.speed;
+    const dt = (t - rec.lastV.t) / 1000;
+    if (dt > .3) { const a = (v - rec.lastV.v) / dt; if (a > rec.gacc) rec.gacc = a; }
+    rec.lastV = { v, t };
+  }
+}
+
+/* ---------- motion sensor (explosive) ---------- */
+const mo = { on:false, seen:false, win:[], sx:0, sy:0, sz:0, grav:null };
+async function motionStart(){
+  if (mo.on || !('DeviceMotionEvent' in window)) return;
+  try { if (typeof DeviceMotionEvent.requestPermission === 'function' && await DeviceMotionEvent.requestPermission() !== 'granted') return; } catch(e) { return; }
+  window.addEventListener('devicemotion', onMotion); mo.on = true;
+}
+function onMotion(e){
+  let x, y, z; const a = e.acceleration;
+  if (a && a.x != null) { x = a.x; y = a.y; z = a.z; }
+  else {
+    const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
+    mo.grav = mo.grav ? { x:mo.grav.x * .92 + g.x * .08, y:mo.grav.y * .92 + g.y * .08, z:mo.grav.z * .92 + g.z * .08 } : { x:g.x, y:g.y, z:g.z };
+    x = g.x - mo.grav.x; y = g.y - mo.grav.y; z = g.z - mo.grav.z;
+  }
+  mo.seen = true;
+  const t = e.timeStamp || performance.now();
+  mo.win.push({ t, x, y, z }); mo.sx += x; mo.sy += y; mo.sz += z;
+  while (mo.win.length && t - mo.win[0].t > 500) { const o = mo.win.shift(); mo.sx -= o.x; mo.sy -= o.y; mo.sz -= o.z; }
+  const n = mo.win.length;
+  if (n < 5 || !rec || rec.type !== 'explosive' || state !== 'running') return;
+  // average over 0.5 s cancels foot-strike spikes and leaves the sustained push
+  const cur = Math.hypot(mo.sx / n, mo.sy / n, mo.sz / n);
+  if (cur > rec.acc) rec.acc = cur;
+}
+
+/* ---------- recording ---------- */
+let rec = null, lastClosedIdx = -1;
+function openRec(){
+  const p = seq[idx];
+  if (!p || p.t !== 'work' || p.type === 'gym') return;
+  const now = Date.now();
+  rec = { rep:p.c, block:p.b, type:p.type, dist:0, max:0, acc:0, gacc:0, t0:now, runMs:0, lastTick:performance.now(), lastV:{ v:gps.good ? gps.speed : 0, t:now } };
+  mo.win = []; mo.sx = mo.sy = mo.sz = 0;
+}
+function closeRec(){
+  if (!rec) return;
+  if (state === 'running') rec.runMs += performance.now() - rec.lastTick;
+  const s = Math.max(.5, rec.runMs / 1000), hadGps = rec.max > 0 || rec.dist > 0;
+  results.rows.push({
+    rep:rec.rep, block:rec.block, type:rec.type, dur:Math.round(s), gps:hadGps,
+    dist:Math.round(rec.dist), avg:+(rec.dist / s * 3.6).toFixed(1), max:+(rec.max * 3.6).toFixed(1),
+    acc:+(mo.seen ? rec.acc : rec.gacc).toFixed(1), accSrc:mo.seen ? 'sensor' : 'gps'
+  });
+  lastClosedIdx = idx; rec = null; store(RKEY, results);
+}
+
+/* ---------- engine ---------- */
+const nextIsWork = () => seq[idx].t !== 'work' && seq[idx + 1] && seq[idx + 1].t === 'work';
+function onPhaseStart(withSound = true){
+  lastWhole = null;
+  openRec();
+  if (!withSound) return;
+  const p = seq[idx];
+  if (p.t === 'work') { sfx.work(); buzz(400); }
+  else if (p.t === 'rest') { sfx.rest(); buzz([120, 80, 120]); }
+}
+function onSecond(w){
+  if (nextIsWork() && w >= 1 && w <= cfg.warn) {
+    sfx.count(); buzz(80);
+    el.body.classList.remove('flash'); void el.body.offsetWidth; el.body.classList.add('flash');
+    el.num.classList.remove('pop'); void el.num.offsetWidth; el.num.classList.add('pop');
+  }
+}
+function tick(){
+  if (state !== 'running') return;
+  const now = performance.now();
+  if (rec) { rec.runMs += now - rec.lastTick; rec.lastTick = now; }
+  let rem = phaseEnd - now;
+  while (rem <= 0) {
+    closeRec();
+    idx++;
+    if (idx >= seq.length) { finish(); return; }
+    phaseEnd += seq[idx].d * 1000; rem = phaseEnd - performance.now();
+    onPhaseStart();
+  }
+  remainingMs = rem;
+  const w = Math.ceil(rem / 1000);
+  if (w !== lastWhole) { lastWhole = w; onSecond(w); }
+  render();
+}
+function start(){
+  ensureAudio(); wake();
+  const n = needs(); if (n.gps) gpsStart(); if (n.motion) motionStart();
+  if (state === 'idle' || state === 'done') {
+    idx = 0; remainingMs = seq[0].d * 1000; lastClosedIdx = -1;
+    results = { name:cfg.name, date:new Date().toISOString(), rows:[] };
+    state = 'running'; onPhaseStart(seq[0].t === 'work');
+  }
+  if (rec) rec.lastTick = performance.now();
+  phaseEnd = performance.now() + remainingMs;
+  state = 'running'; clearInterval(loop); loop = setInterval(tick, 50); tick();
+}
+function pause(){
+  const now = performance.now();
+  if (rec) { rec.runMs += now - rec.lastTick; rec.lastTick = now; }
+  remainingMs = phaseEnd - now; state = 'paused'; clearInterval(loop); sleep(); render();
+}
+function reset(){
+  clearInterval(loop); rec = null; sleep();
+  state = 'idle'; idx = 0; remainingMs = seq[0].d * 1000; lastWhole = null;
+  el.body.classList.remove('flash'); render();
+}
+function skip(){
+  if (state === 'running') { phaseEnd = performance.now(); tick(); }
+  else if (state === 'paused') {
+    closeRec(); idx++;
+    if (idx >= seq.length) { finish(); return; }
+    remainingMs = seq[idx].d * 1000; onPhaseStart(false); render();
+  }
+}
+function finish(){
+  closeRec(); clearInterval(loop);
+  state = 'done'; idx = seq.length - 1; remainingMs = 0;
+  gpsStop(); sleep();
+  sfx.done(); buzz([200, 100, 200, 100, 400]);
+  render();
+}
+
+/* ---------- view ---------- */
+const NAMES = { prep:'Get ready', rest:'Rest' };
+const blockTxt = b => b.w + '/' + b.r + (b.type !== 'gym' ? ' ' + TYPES[b.type].toLowerCase() : '');
+const summary = c => c.blocks.map(blockTxt).join(' + ') + ' s, ' + c.reps + (c.reps === 1 ? ' repetition' : ' repetitions') + '.' + (c.warn ? ' ' + c.warn + ' s countdown before every work block.' : '');
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+let liveKey = '';
+function renderLive(){
+  let cap = '', cells = [];
+  const p = seq[idx], active = state === 'running' || state === 'paused';
+  if (active && rec && p.t === 'work') {
+    const spd = gps.good ? (gps.speed * 3.6).toFixed(1) : '--';
+    if (rec.type === 'cardio') cells = [[spd, 'km/h'], [Math.round(rec.dist), 'm']];
+    else cells = [[(mo.seen ? rec.acc : rec.gacc).toFixed(1), 'peak m/s²'], [rec.max ? (rec.max * 3.6).toFixed(1) : '--', 'max km/h']];
+    if (!gps.good) cap = 'Waiting for GPS';
+  } else if (active && p.t !== 'work' && lastClosedIdx === idx - 1 && results && results.rows.length) {
+    const r = results.rows[results.rows.length - 1];
+    cap = 'Last rep';
+    cells = r.type === 'cardio'
+      ? [[r.avg.toFixed(1), 'avg km/h'], [r.max.toFixed(1), 'max km/h'], [r.dist, 'm']]
+      : [[r.acc.toFixed(1), 'peak m/s²'], [r.gps ? r.max.toFixed(1) : '--', 'max km/h']];
+  }
+  const key = cap + '|' + cells.join(';');
+  if (key === liveKey) return;
+  liveKey = key;
+  el.liveWrap.hidden = !cells.length;
+  el.liveCap.textContent = cap; el.liveCap.hidden = !cap;
+  el.live.innerHTML = cells.map(c => '<div><b>' + c[0] + '</b><span>' + c[1] + '</span></div>').join('');
+  el.num.classList.toggle('withlive', !!cells.length);
+}
+function renderChip(){
+  const need = needs().gps;
+  el.chip.hidden = !need || state === 'done';
+  if (el.chip.hidden) return;
+  let txt, cls = '';
+  if (gps.err) { txt = gps.err; cls = 'bad'; }
+  else if (gps.watch === null) txt = 'Tap to start GPS';
+  else if (gps.acc == null || Date.now() - gps.lastFixAt > 5000) { txt = 'GPS searching'; cls = 'mid'; }
+  else { txt = 'GPS ±' + Math.round(gps.acc) + ' m'; cls = gps.acc <= 10 ? 'ok' : gps.acc <= 30 ? 'mid' : 'bad'; }
+  if (el.chipTxt.textContent !== txt) el.chipTxt.textContent = txt;
+  const c = 'chip ' + cls; if (el.chip.className !== c) el.chip.className = c;
+}
+function render(){
+  const p = seq[idx];
+  el.body.dataset.phase = state === 'idle' ? 'idle' : state === 'done' ? 'done' : p.t;
+  if (state === 'idle') {
+    el.phase.textContent = cfg.name || 'Ready';
+    el.num.textContent = fmt(TOTAL); el.num.classList.add('long');
+    el.next.textContent = summary(cfg);
+    el.cycle.textContent = cfg.reps + (cfg.reps === 1 ? ' round' : ' rounds');
+    el.left.textContent = fmt(TOTAL);
+  } else if (state === 'done') {
+    el.phase.textContent = 'Done';
+    el.num.textContent = fmt(TOTAL); el.num.classList.add('long');
+    el.next.textContent = cfg.reps + (cfg.reps === 1 ? ' round' : ' rounds') + ' complete. Nice work.';
+    el.cycle.textContent = 'Round ' + cfg.reps + ' of ' + cfg.reps;
+    el.left.textContent = '0:00';
+  } else {
+    el.phase.textContent = (p.t === 'work' ? TYPES[p.type] : NAMES[p.t]) + (state === 'paused' ? ' (paused)' : '');
+    el.num.classList.remove('long');
+    el.num.textContent = Math.max(0, Math.ceil(remainingMs / 1000));
+    const n = seq[idx + 1];
+    el.next.textContent = n ? 'Then ' + (n.t === 'work' ? TYPES[n.type].toLowerCase() : n.t) + ' ' + n.d + ' s' + (n.c !== p.c ? ', round ' + n.c : '') : 'Last block';
+    el.cycle.textContent = 'Round ' + p.c + ' of ' + cfg.reps;
+    let rest = remainingMs / 1000; for (let i = idx + 1; i < seq.length; i++) rest += seq[i].d;
+    el.left.textContent = fmt(rest) + ' left';
+  }
+  for (let i = 0; i < seq.length; i++) {
+    if (!fills[i]) continue;
+    let pct = 0;
+    if (state === 'done' || (state !== 'idle' && i < idx)) pct = 100;
+    else if (i === idx && state !== 'idle') pct = 100 * (1 - remainingMs / (seq[i].d * 1000));
+    fills[i].style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+  renderLive(); renderChip();
+  el.resBtn.hidden = !(results && results.rows.length && (state === 'idle' || state === 'done'));
+  $('gpsBtn').hidden = !(state === 'idle' || state === 'done');
+  el.go.textContent = state === 'running' ? 'Pause' : state === 'paused' ? 'Resume' : state === 'done' ? 'Go again' : 'Start';
+  el.skip.disabled = !(state === 'running' || state === 'paused');
+  el.reset.disabled = state === 'idle';
+  el.set.disabled = state === 'running';
+  const tok = { work:'--work', rest:'--rest', done:'--rest', prep:'--prep', idle:'--bg' }[el.body.dataset.phase];
+  const col = getComputedStyle(document.documentElement).getPropertyValue(tok).trim();
+  if (col && themeMeta.content !== col) themeMeta.content = col;
+}
+setInterval(() => { if (state !== 'running') renderChip(); }, 1000);
+
+/* ---------- results ---------- */
+const resDlg = $('resDlg');
+function resModel(){
+  const R = results, rows = R.rows;
+  const hasC = rows.some(r => r.type === 'cardio'), hasE = rows.some(r => r.type === 'explosive');
+  const cols = [['Rep', r => r.rep], ['Type', r => TYPES[r.type] + ' ' + r.dur + ' s']];
+  if (hasC) cols.push(['Dist m', r => r.type === 'cardio' && r.gps ? r.dist : '–'], ['Avg km/h', r => r.type === 'cardio' && r.gps ? r.avg.toFixed(1) : '–']);
+  cols.push(['Max km/h', r => r.gps ? r.max.toFixed(1) : '–']);
+  if (hasE) cols.push(['Peak m/s²', r => r.type === 'explosive' && (r.accSrc === 'sensor' || r.gps) ? r.acc.toFixed(1) : '–']);
+  const tot = [];
+  const C = rows.filter(r => r.type === 'cardio' && r.gps), E = rows.filter(r => r.type === 'explosive');
+  if (C.length) {
+    const d = C.reduce((a, r) => a + r.dist, 0);
+    tot.push([d >= 1000 ? (d / 1000).toFixed(2) + ' km' : d + ' m', 'Cardio distance']);
+    tot.push([(C.reduce((a, r) => a + r.avg, 0) / C.length).toFixed(1), 'Avg speed km/h']);
+  }
+  const maxAll = Math.max(0, ...rows.filter(r => r.gps).map(r => r.max));
+  if (maxAll) tot.push([maxAll.toFixed(1), 'Top speed km/h']);
+  if (E.length) tot.push([Math.max(...E.map(r => r.acc)).toFixed(1), 'Peak accel m/s²']);
+  return { cols, tot, gpsSrc:E.some(r => r.accSrc === 'gps'), noGps:rows.some(r => !r.gps) };
+}
+function openResults(){
+  if (!results || !results.rows.length) return;
+  const m = resModel();
+  $('resMeta').textContent = (results.name ? results.name + ', ' : '') + new Date(results.date).toLocaleString([], { dateStyle:'medium', timeStyle:'short' });
+  $('resTot').innerHTML = m.tot.map(t => '<div><b>' + t[0] + '</b><span>' + t[1] + '</span></div>').join('');
+  $('resTable').innerHTML = '<thead><tr>' + m.cols.map(c => '<th>' + c[0] + '</th>').join('') + '</tr></thead><tbody>' +
+    results.rows.map(r => '<tr>' + m.cols.map(c => '<td>' + c[1](r) + '</td>').join('') + '</tr>').join('') + '</tbody>';
+  const notes = [];
+  if (m.noGps) notes.push('A dash means there was no usable GPS signal for that rep.');
+  if (m.gpsSrc) notes.push('No motion sensor was available, so acceleration was estimated from GPS speed.');
+  else if (results.rows.some(r => r.type === 'explosive')) notes.push('Peak acceleration is an estimate from the phone’s motion sensor. Compare it only with sessions where the phone was worn the same way.');
+  $('resNote').textContent = notes.join(' '); $('resNote').hidden = !notes.length;
+  resDlg.showModal();
+}
+async function shareResults(){
+  const m = resModel();
+  const lines = [(results.name || 'HIIT') + ', ' + new Date(results.date).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })];
+  m.tot.forEach(t => lines.push(t[1] + ': ' + t[0]));
+  lines.push('');
+  lines.push(m.cols.map(c => c[0]).join(' | '));
+  results.rows.forEach(r => lines.push(m.cols.map(c => c[1](r)).join(' | ')));
+  const text = lines.join('\n'), btn = $('resShare');
+  try { if (navigator.share) { await navigator.share({ title:'HIIT results', text }); return; } } catch(e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; } catch(e) { btn.textContent = 'Could not copy'; }
+  setTimeout(() => btn.textContent = 'Share', 2000);
+}
+$('resClose').addEventListener('click', () => resDlg.close());
+$('resShare').addEventListener('click', shareResults);
+el.resBtn.addEventListener('click', openResults);
+
+/* ---------- lock ---------- */
+const lockEl = $('lock'), unlockBtn = $('unlock'), unlockBar = $('unlockBar');
+function lockOn(){
+  locked = true; el.body.classList.add('locked'); lockEl.hidden = false; wake();
+  try { const d = document.documentElement; if (d.requestFullscreen) d.requestFullscreen({ navigationUI:'hide' }).catch(() => {}); } catch(e) {}
+  try { history.pushState({ hiitLock:1 }, ''); } catch(e) {}
+}
+function lockOff(){
+  locked = false; el.body.classList.remove('locked'); lockEl.hidden = true;
+  try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch(e) {}
+  try { if (history.state && history.state.hiitLock) history.back(); } catch(e) {}
+  if (state !== 'running') sleep();
+}
+window.addEventListener('popstate', () => { if (locked) try { history.pushState({ hiitLock:1 }, ''); } catch(e) {} });
+let holdRaf = null, holdStart = 0;
+function holdTick(){
+  const p = Math.min(1, (performance.now() - holdStart) / 1200);
+  unlockBar.style.width = p * 100 + '%';
+  if (p >= 1) { holdEnd(); lockOff(); return; }
+  holdRaf = requestAnimationFrame(holdTick);
+}
+function holdEnd(){ cancelAnimationFrame(holdRaf); holdRaf = null; unlockBar.style.width = '0'; }
+unlockBtn.addEventListener('pointerdown', e => { e.preventDefault(); holdStart = performance.now(); cancelAnimationFrame(holdRaf); holdRaf = requestAnimationFrame(holdTick); });
+['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => unlockBtn.addEventListener(ev, holdEnd));
+unlockBtn.addEventListener('contextmenu', e => e.preventDefault());
+$('lockBtn').addEventListener('click', lockOn);
+
+/* ---------- settings ---------- */
+const dlg = $('dlg'), blocksEl = $('blocks'), repsIn = $('reps'), warnIn = $('warn'), totEl = $('tot'), nameIn = $('wname'), presetsEl = $('presets'), saveBtn = $('save');
+let draft = null;
+function readDraft(){
+  draft = sanitize({
+    blocks:[...blocksEl.querySelectorAll('.block')].map(b => ({ w:b.querySelector('.wi').value, r:b.querySelector('.ri').value, type:(b.querySelector('.types input:checked') || {}).value })),
+    reps:repsIn.value, warn:warnIn.value, name:nameIn.value
+  });
+  totEl.textContent = fmt(totalOf(draft));
+  saveBtn.textContent = draft.name ? 'Save workout' : 'Save';
+}
+function drawBlocks(list){
+  blocksEl.innerHTML = '';
+  list.forEach((b, i) => {
+    const row = document.createElement('div'); row.className = 'block';
+    row.innerHTML =
+      '<span class="n">' + (i + 1) + '</span>' +
+      '<label class="w">Work (s)<input class="wi" type="number" min="1" max="3600" inputmode="numeric" value="' + b.w + '"></label>' +
+      '<label class="r">Rest (s)<input class="ri" type="number" min="0" max="3600" inputmode="numeric" value="' + b.r + '"></label>' +
+      '<button type="button" class="del" aria-label="Remove block ' + (i + 1) + '"' + (list.length === 1 ? ' disabled' : '') + '>Remove</button>' +
+      '<div class="types" role="radiogroup" aria-label="Exercise type for block ' + (i + 1) + '">' +
+        Object.keys(TYPES).map(k => '<label><input type="radio" name="type' + i + '" value="' + k + '"' + (b.type === k ? ' checked' : '') + '><span>' + TYPES[k] + '</span></label>').join('') +
+      '</div>';
+    row.querySelector('.del').addEventListener('click', () => { readDraft(); draft.blocks.splice(i, 1); drawBlocks(draft.blocks); readDraft(); });
+    blocksEl.appendChild(row);
+  });
+  $('addBlock').disabled = list.length >= 10;
+}
+const shortSum = c => c.blocks.map(blockTxt).join(' + ') + ' s × ' + c.reps + ', ' + fmt(totalOf(c));
+function drawPresets(){
+  presetsEl.innerHTML = '';
+  $('presetWrap').hidden = !presets.length;
+  presets.forEach((p, i) => {
+    const row = document.createElement('div'); row.className = 'preset';
+    const use = document.createElement('button'); use.type = 'button'; use.className = 'pload' + (p.name === cfg.name ? ' on' : '');
+    const b = document.createElement('b'); b.textContent = p.name;
+    const s = document.createElement('span'); s.textContent = shortSum(p);
+    use.append(b, s);
+    use.addEventListener('click', () => { applyCfg(p); dlg.close(); });
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'pdel'; del.textContent = 'Delete';
+    del.setAttribute('aria-label', 'Delete ' + p.name);
+    del.addEventListener('click', () => {
+      if (!del.classList.contains('arm')) {
+        del.classList.add('arm'); del.textContent = 'Sure?';
+        setTimeout(() => { if (del.isConnected) { del.classList.remove('arm'); del.textContent = 'Delete'; } }, 3000);
+        return;
+      }
+      presets.splice(i, 1); store(PKEY, presets); drawPresets();
+    });
+    row.append(use, del); presetsEl.appendChild(row);
+  });
+}
+function applyCfg(c){
+  cfg = sanitize(c); store(KEY, cfg);
+  if (!needs().gps) gpsStop();
+  build(); reset();
+}
+function openSettings(){
+  if (state === 'paused') reset();
+  drawBlocks(cfg.blocks); repsIn.value = cfg.reps; warnIn.value = cfg.warn; nameIn.value = cfg.name || ''; readDraft(); drawPresets();
+  dlg.showModal();
+}
+$('form').addEventListener('input', readDraft);
+$('addBlock').addEventListener('click', () => { readDraft(); const last = draft.blocks[draft.blocks.length - 1]; draft.blocks.push({ ...last }); drawBlocks(draft.blocks); readDraft(); const ins = blocksEl.querySelectorAll('.wi'); ins[ins.length - 1].focus(); });
+$('cancel').addEventListener('click', () => dlg.close());
+$('defaults').addEventListener('click', () => { drawBlocks(DEFAULT.blocks); repsIn.value = DEFAULT.reps; warnIn.value = DEFAULT.warn; nameIn.value = ''; readDraft(); });
+nameIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); } });
+saveBtn.addEventListener('click', () => {
+  readDraft();
+  if (draft.name) {
+    const k = draft.name.toLowerCase(), i = presets.findIndex(p => p.name.toLowerCase() === k), copy = JSON.parse(JSON.stringify(draft));
+    if (i >= 0) presets[i] = copy; else presets.push(copy);
+    store(PKEY, presets);
+  }
+  applyCfg(draft); dlg.close();
+});
+
+/* ---------- GPS measuring (cones) ---------- */
+const AVG_MS = 5000;
+const ms = { open:false, cones:[], recent:[], avg:null, target:0, armed:true, timer:null, msg:null };
+const gv = { view:$('gview'), dist:$('gDist'), label:$('gLabel'), sub:$('gSub'), acc:$('gAcc'), accTxt:$('gAccTxt'), list:$('cones'), drop:$('gDrop'), undo:$('gUndo'), clear:$('gClear'), other:$('gOther'), chips:$('gChips') };
+ms.cones = (Array.isArray(load('hiit-cones-v1', [])) ? load('hiit-cones-v1', []) : []).filter(c => c && isFinite(c.lat) && isFinite(c.lon));
+ms.target = Math.max(0, Math.min(1000, Number(load('hiit-cone-target-v1', 0)) || 0));
+function msFix(c){
+  if (!(c.accuracy <= 25)) return;
+  const f = { lat:c.latitude, lon:c.longitude, acc:Math.max(1, c.accuracy), t:Date.now() };
+  ms.recent.push(f);
+  while (ms.recent.length && f.t - ms.recent[0].t > 3000) ms.recent.shift();
+  if (ms.avg) ms.avg.fixes.push(f);
+}
+function wmean(fs){
+  if (!fs.length) return null;
+  let w = 0, la = 0, lo = 0, ac = 0;
+  fs.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; la += f.lat * k; lo += f.lon * k; ac += f.acc; });
+  return { lat:la / w, lon:lo / w, acc:ac / fs.length };
+}
+const herePos = () => { const now = Date.now(); return wmean(ms.recent.filter(f => now - f.t <= 3000)); };
+const say = (text, ms_ = 3500) => { ms.msg = { text, until:Date.now() + ms_ }; };
+function msRender(){
+  if (!ms.open) return;
+  let txt, cls = '';
+  if (gps.err) { txt = gps.err; cls = 'bad'; }
+  else if (gps.acc == null || Date.now() - gps.lastFixAt > 5000) { txt = 'GPS searching'; cls = 'mid'; }
+  else { txt = 'GPS ±' + Math.round(gps.acc) + ' m'; cls = gps.acc <= 5 ? 'ok' : gps.acc <= 15 ? 'mid' : 'bad'; }
+  gv.accTxt.textContent = txt; gv.acc.className = 'chip ' + cls;
+  const p = herePos(), last = ms.cones[ms.cones.length - 1];
+  const d = p && last ? hav(last, p) : null;
+  gv.dist.textContent = d == null ? '--' : d.toFixed(1);
+  let label, reached = false;
+  if (!ms.cones.length) label = 'Stand on your start point and drop the first cone';
+  else if (d == null) label = 'Waiting for a GPS fix';
+  else if (ms.target) {
+    const togo = ms.target - d;
+    if (togo <= .3) { reached = true; label = ms.target + ' m reached. Drop cone ' + (ms.cones.length + 1) + ' here'; }
+    else label = togo.toFixed(1) + ' m to go to ' + ms.target + ' m from cone ' + ms.cones.length;
+  } else label = 'Distance from cone ' + ms.cones.length;
+  if (ms.avg) label = 'Hold still, averaging the position';
+  if (ms.msg && Date.now() < ms.msg.until) label = ms.msg.text;
+  gv.label.textContent = label;
+  gv.view.classList.toggle('reached', reached && !ms.avg);
+  if (reached && ms.armed && !ms.avg) { ms.armed = false; tone(1320, .45, 0, .32); buzz(300); }
+  if (d != null && ms.target && d < ms.target - 1) ms.armed = true;
+  const subs = [];
+  if (ms.cones.length > 1 && p) subs.push(hav(ms.cones[0], p).toFixed(1) + ' m from cone 1');
+  if (gps.good && Date.now() - gps.lastFixAt < 5000) subs.push((gps.speed * 3.6).toFixed(1) + ' km/h');
+  gv.sub.textContent = subs.join(', ');
+  if (ms.avg) { gv.drop.textContent = 'Hold still ' + Math.max(1, Math.ceil((ms.avg.end - Date.now()) / 1000)) + ' s'; gv.drop.disabled = true; }
+  else { gv.drop.textContent = ms.cones.length ? 'Drop cone ' + (ms.cones.length + 1) : 'Drop first cone'; gv.drop.disabled = false; }
+  gv.undo.disabled = gv.clear.disabled = !ms.cones.length || !!ms.avg;
+}
+function msDrawList(){
+  gv.list.innerHTML = '';
+  for (let i = ms.cones.length - 1; i >= 0; i--) {
+    const c = ms.cones[i], li = document.createElement('li');
+    const info = i === 0 ? 'Start point' : hav(ms.cones[i - 1], c).toFixed(1) + ' m from cone ' + i + (i > 1 ? '<br>' + hav(ms.cones[0], c).toFixed(1) + ' m from cone 1' : '');
+    li.innerHTML = '<b>Cone ' + (i + 1) + '</b><span>' + info + '</span><em>±' + Math.round(c.acc) + ' m</em>';
+    gv.list.appendChild(li);
+  }
+  store('hiit-cones-v1', ms.cones);
+}
+function msDrop(){
+  if (ms.avg) return;
+  if (!herePos()) { say('No GPS fix yet. Wait until the chip shows ±5 m or better.'); msRender(); return; }
+  ms.avg = { end:Date.now() + AVG_MS, fixes:[] };
+  msRender();
+  setTimeout(() => {
+    if (!ms.avg) return;
+    const m = wmean(ms.avg.fixes) || herePos(); ms.avg = null;
+    if (!m) { say('Lost the GPS fix. Try again.'); msRender(); return; }
+    ms.cones.push({ lat:m.lat, lon:m.lon, acc:m.acc });
+    ms.armed = true; tone(880, .15); tone(1175, .25, .17); buzz(120);
+    msDrawList(); msRender();
+  }, AVG_MS);
+}
+function msSetTarget(t){
+  ms.target = Math.max(0, Math.min(1000, Math.round((Number(t) || 0) * 2) / 2));
+  store('hiit-cone-target-v1', ms.target); ms.armed = true;
+  const preset = [...gv.chips.querySelectorAll('button')];
+  const match = preset.find(b => Number(b.dataset.t) === ms.target);
+  preset.forEach(b => b.classList.toggle('on', b === match));
+  gv.other.classList.toggle('on', !match);
+  if (match) gv.other.value = '';
+  else if (document.activeElement !== gv.other) gv.other.value = ms.target;
+  msRender();
+}
+function msOpen(){
+  ms.open = true; gv.view.hidden = false; ensureAudio();
+  gps.err = null; gpsStart(); wake();
+  msDrawList(); msSetTarget(ms.target);
+  clearInterval(ms.timer); ms.timer = setInterval(msRender, 250);
+}
+function msClose(){
+  ms.open = false; gv.view.hidden = true; clearInterval(ms.timer); ms.avg = null; ms.recent = [];
+  if (state !== 'running' && state !== 'paused') { gpsStop(); sleep(); }
+  render();
+}
+$('gpsBtn').addEventListener('click', msOpen);
+$('gBack').addEventListener('click', msClose);
+gv.drop.addEventListener('click', msDrop);
+gv.undo.addEventListener('click', () => { ms.cones.pop(); ms.armed = true; msDrawList(); msRender(); });
+gv.clear.addEventListener('click', () => {
+  if (!gv.clear.classList.contains('arm')) {
+    gv.clear.classList.add('arm'); gv.clear.textContent = 'Sure?';
+    setTimeout(() => { gv.clear.classList.remove('arm'); gv.clear.textContent = 'Clear'; }, 3000);
+    return;
+  }
+  gv.clear.classList.remove('arm'); gv.clear.textContent = 'Clear';
+  ms.cones = []; msDrawList(); msRender();
+});
+gv.chips.querySelectorAll('button').forEach(b => b.addEventListener('click', () => msSetTarget(b.dataset.t)));
+gv.other.addEventListener('input', () => msSetTarget(gv.other.value));
+
+/* ---------- wiring ---------- */
+el.go.addEventListener('click', () => state === 'running' ? pause() : start());
+el.skip.addEventListener('click', skip);
+el.reset.addEventListener('click', reset);
+el.set.addEventListener('click', openSettings);
+el.chip.addEventListener('click', () => { gps.err = null; gpsStart(); if (needs().motion) motionStart(); renderChip(); });
+el.snd.addEventListener('click', () => { soundOn = !soundOn; ensureAudio(); el.snd.textContent = soundOn ? 'Sound' : 'Muted'; el.snd.setAttribute('aria-pressed', soundOn); if (soundOn) sfx.count(); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' && !locked && !ms.open && !dlg.open && !resDlg.open && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { e.preventDefault(); el.go.click(); } });
+
+build(); reset();
+if ('serviceWorker' in navigator && location.protocol === 'https:' && !location.hostname.endsWith('claude.ai')) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
